@@ -50,14 +50,14 @@ func processSnapshot(tick string, balances []*models.TokenBalance) *models.Token
 		Summary:   models.SnapshotSummary{},
 	}
 
-	var totalSupply int64
-	var lockedTokens int64
+	var totalSupply uint64
+	var lockedTokens uint64
 
 	// Process each balance
 	for _, balance := range balances {
 		if balance.Balance > 0 || balance.Locked > 0 {
-			totalSupply += balance.Balance + balance.Locked
-			lockedTokens += balance.Locked
+			totalSupply += uint64(balance.Balance) + uint64(balance.Locked)
+			lockedTokens += uint64(balance.Locked)
 
 			holder := models.TokenHolder{
 				Address: balance.Address,
@@ -72,7 +72,7 @@ func processSnapshot(tick string, balances []*models.TokenBalance) *models.Token
 	for i := range snapshot.Holders {
 		total := snapshot.Holders[i].Balance + snapshot.Holders[i].Locked
 		if totalSupply > 0 {
-			snapshot.Holders[i].Share = float64(total) / float64(totalSupply) * 100
+			snapshot.Holders[i].Share = (float64(total) / float64(totalSupply)) * 100.0
 		}
 	}
 

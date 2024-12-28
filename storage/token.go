@@ -31,8 +31,8 @@ func GetTokenBalances(tick string) ([]*models.TokenBalance, error) {
 	for iter.Scan(&address, &tickResult, &dec, &balance, &locked) {
 		balances = append(balances, &models.TokenBalance{
 			Address: address,
-			Balance: parseStringToInt64(balance),
-			Locked:  parseStringToInt64(locked),
+			Balance: parseStringToUint64(balance),
+			Locked:  parseStringToUint64(locked),
 			Dec:     dec,
 		})
 	}
@@ -58,15 +58,15 @@ func GetTokenInfo(tick string) (*models.TokenInfo, error) {
 	return &models.TokenInfo{
 		Tick:   tick,
 		Meta:   meta,
-		Minted: parseStringToInt64(minted),
+		Minted: parseStringToUint64(minted),
 		OpMod:  int64(opMod),
 		MtsMod: mtsMod,
 	}, nil
 }
 
-func parseStringToInt64(s string) int64 {
-	// Helper function to parse string to int64
-	var result int64
+func parseStringToUint64(s string) uint64 {
+	// Helper function to parse string to uint64
+	var result uint64
 	json.Unmarshal([]byte(s), &result)
 	return result
 }
@@ -84,12 +84,12 @@ func GetTokenHoldersPaginated(tick string, page, pageSize int) ([]models.HolderI
 	iter := query.Iter()
 	var address, balance, locked string
 	holders := make([]models.HolderInfo, 0, 2000)
-	var totalSupply int64
+	var totalSupply uint64
 
 	// First pass: collect all non-zero balances and calculate total supply
 	for iter.Scan(&address, &balance, &locked) {
-		bal := parseStringToInt64(balance)
-		lock := parseStringToInt64(locked)
+		bal := parseStringToUint64(balance)
+		lock := parseStringToUint64(locked)
 		total := bal + lock
 		if total > 0 {
 			holders = append(holders, models.HolderInfo{
@@ -234,7 +234,7 @@ func parseOperationDetails(script, txid, state string, timestamp int64, stBefore
 
 	// Parse state changes to determine from/to addresses and amount
 	var from, to string
-	var amount int64
+	var amount uint64
 
 	// Extract operation details from state changes
 	if strings.Contains(stBefore, KeyPrefixStateBalance) {
@@ -249,9 +249,11 @@ func parseOperationDetails(script, txid, state string, timestamp int64, stBefore
 					from = balanceParts[1]
 					// Compare before and after balances to determine amount
 					if i < len(afterParts) {
-						beforeBal := parseStringToInt64(beforeParts[i])
-						afterBal := parseStringToInt64(afterParts[i])
-						amount = beforeBal - afterBal
+						beforeBal := parseStringToUint64(beforeParts[i])
+						afterBal := parseStringToUint64(afterParts[i])
+						if beforeBal > afterBal {
+							amount = beforeBal - afterBal
+						}
 					}
 				}
 				break

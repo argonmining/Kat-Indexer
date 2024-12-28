@@ -10,7 +10,7 @@ type Operation struct {
 	Type      string `json:"type"` // e.g., "transfer", "mint", "burn"
 	From      string `json:"from"`
 	To        string `json:"to"`
-	Amount    int64  `json:"amount"`
+	Amount    uint64 `json:"amount"`
 	Timestamp int64  `json:"timestamp"`
 	State     string `json:"state"` // success/failed
 }

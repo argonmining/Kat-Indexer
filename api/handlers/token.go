@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"kasplex-executor/storage"
 	"net/http"
 )
@@ -46,5 +47,29 @@ func GetTokenInfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sendResponse(w, http.StatusOK, true, info, "")
+	// Parse the meta string into a map
+	var metaData map[string]interface{}
+	if err := json.Unmarshal([]byte(info.Meta), &metaData); err != nil {
+		sendResponse(w, http.StatusInternalServerError, false, nil, "Failed to parse meta data")
+		return
+	}
+
+	// Create a new response structure
+	response := map[string]interface{}{
+		"tick":    info.Tick,
+		"max":     metaData["max"],
+		"lim":     metaData["lim"],
+		"pre":     metaData["pre"],
+		"dec":     metaData["dec"],
+		"from":    metaData["from"],
+		"to":      metaData["to"],
+		"txid":    metaData["txid"],
+		"opadd":   metaData["opadd"],
+		"mtsadd":  metaData["mtsadd"],
+		"minted":  info.Minted,
+		"op_mod":  info.OpMod,
+		"mts_mod": info.MtsMod,
+	}
+
+	sendResponse(w, http.StatusOK, true, response, "")
 }

@@ -2,15 +2,15 @@ package models
 
 type TokenBalance struct {
 	Address string `json:"address"`
-	Balance int64  `json:"balance"`
-	Locked  int64  `json:"locked"`
+	Balance uint64 `json:"balance"`
+	Locked  uint64 `json:"locked"`
 	Dec     int    `json:"decimals"`
 }
 
 type TokenInfo struct {
 	Tick   string `json:"tick"`
 	Meta   string `json:"meta"`
-	Minted int64  `json:"minted"`
+	Minted uint64 `json:"minted"`
 	OpMod  int64  `json:"op_mod"`
 	MtsMod int64  `json:"mts_mod"`
 }
@@ -32,15 +32,15 @@ type TokenSnapshot struct {
 // TokenHolder represents a single holder's balance
 type TokenHolder struct {
 	Address string  `json:"address"`
-	Balance int64   `json:"balance"`
-	Locked  int64   `json:"locked"`
+	Balance uint64  `json:"balance"`
+	Locked  uint64  `json:"locked"`
 	Share   float64 `json:"share"` // Percentage of total supply
 }
 
 // SnapshotSummary provides overview statistics
 type SnapshotSummary struct {
-	TotalSupply       int64 `json:"totalSupply"`
-	HoldersCount      int   `json:"holdersCount"`
-	LockedTokens      int64 `json:"lockedTokens"`
-	CirculatingSupply int64 `json:"circulatingSupply"`
+	TotalSupply       uint64 `json:"totalSupply"`
+	HoldersCount      int    `json:"holdersCount"`
+	LockedTokens      uint64 `json:"lockedTokens"`
+	CirculatingSupply uint64 `json:"circulatingSupply"`
 }

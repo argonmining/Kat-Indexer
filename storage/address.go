@@ -18,8 +18,8 @@ func GetAddressBalances(address string) ([]*models.AddressBalance, error) {
 	for iter.Scan(&tick, &dec, &balance, &locked) {
 		balances = append(balances, &models.AddressBalance{
 			Tick:    tick,
-			Balance: parseStringToInt64(balance),
-			Locked:  parseStringToInt64(locked),
+			Balance: parseStringToUint64(balance),
+			Locked:  parseStringToUint64(locked),
 			Dec:     dec,
 		})
 	}

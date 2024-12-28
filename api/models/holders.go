@@ -7,8 +7,8 @@ type HoldersResponse struct {
 
 type HolderInfo struct {
 	Address string  `json:"address"`
-	Balance int64   `json:"balance"`
-	Locked  int64   `json:"locked"`
+	Balance uint64  `json:"balance"`
+	Locked  uint64  `json:"locked"`
 	Share   float64 `json:"share"`
 	Rank    int     `json:"rank"`
 }
