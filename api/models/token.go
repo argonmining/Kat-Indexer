@@ -39,10 +39,10 @@ type TokenHolder struct {
 
 // SnapshotSummary provides overview statistics
 type SnapshotSummary struct {
-	TotalSupply       uint64 `json:"totalSupply"`
+	TotalSupply       string `json:"totalSupply"`
 	HoldersCount      int    `json:"holdersCount"`
-	LockedTokens      uint64 `json:"lockedTokens"`
-	CirculatingSupply uint64 `json:"circulatingSupply"`
+	LockedTokens      string `json:"lockedTokens"`
+	CirculatingSupply string `json:"circulatingSupply"`
 }
 
 type TokenListItem struct {

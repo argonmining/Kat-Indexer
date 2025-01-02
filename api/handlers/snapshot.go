@@ -1,8 +1,11 @@
 package handlers
 
 import (
+	"encoding/json"
 	"log"
+	"math/big"
 	"net/http"
+	"strconv"
 	"time"
 
 	"kasplex-executor/api/models"
@@ -26,6 +29,14 @@ func GetTokenSnapshot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get token info first to get the max supply
+	tokenInfo, err := storage.GetTokenInfo(tick)
+	if err != nil {
+		log.Printf("ERROR: Failed to fetch token info for %s: %v", tick, err)
+		sendResponse(w, http.StatusInternalServerError, false, nil, "Failed to fetch token info: "+err.Error())
+		return
+	}
+
 	// Get token balances from storage
 	log.Printf("DEBUG: Fetching balances for tick: %s", tick)
 	balances, err := storage.GetTokenBalances(tick)
@@ -38,11 +49,13 @@ func GetTokenSnapshot(w http.ResponseWriter, r *http.Request) {
 	log.Printf("DEBUG: Found %d balances for tick: %s", len(balances), tick)
 
 	// Process the snapshot
-	snapshot := processSnapshot(tick, balances)
+	snapshot := processSnapshot(tick, balances, tokenInfo)
 	sendResponse(w, http.StatusOK, true, snapshot, "")
 }
 
-func processSnapshot(tick string, balances []*models.TokenBalance) *models.TokenSnapshot {
+func processSnapshot(tick string, balances []*models.TokenBalance, tokenInfo *models.TokenInfo) *models.TokenSnapshot {
+	log.Printf("DEBUG: Processing snapshot for tick %s with %d balances", tick, len(balances))
+
 	snapshot := &models.TokenSnapshot{
 		Tick:      tick,
 		Timestamp: time.Now().Unix(),
@@ -50,39 +63,82 @@ func processSnapshot(tick string, balances []*models.TokenBalance) *models.Token
 		Summary:   models.SnapshotSummary{},
 	}
 
-	var totalSupply uint64
+	// Parse token max from meta
+	var metaData map[string]interface{}
+	log.Printf("DEBUG: Token meta: %s", tokenInfo.Meta)
+
+	if err := json.Unmarshal([]byte(tokenInfo.Meta), &metaData); err != nil {
+		log.Printf("ERROR: Failed to parse meta for tick %s: %v", tick, err)
+		return snapshot
+	}
+
+	maxStr, ok := metaData["max"].(string)
+	if !ok {
+		log.Printf("ERROR: Max value not found or not a string in meta for tick %s", tick)
+		return snapshot
+	}
+
+	log.Printf("DEBUG: Max supply (string): %s", maxStr)
+
 	var lockedTokens uint64
+	var totalBalance uint64
 
 	// Process each balance
 	for _, balance := range balances {
 		if balance.Balance > 0 || balance.Locked > 0 {
-			totalSupply += uint64(balance.Balance) + uint64(balance.Locked)
-			lockedTokens += uint64(balance.Locked)
+			lockedTokens += balance.Locked
+			totalBalance += balance.Balance + balance.Locked
 
 			holder := models.TokenHolder{
 				Address: balance.Address,
 				Balance: balance.Balance,
 				Locked:  balance.Locked,
 			}
+
 			snapshot.Holders = append(snapshot.Holders, holder)
 		}
 	}
 
+	log.Printf("DEBUG: Found %d holders, total balance: %d, locked: %d", len(snapshot.Holders), totalBalance, lockedTokens)
+
 	// Calculate shares and summary
 	for i := range snapshot.Holders {
 		total := snapshot.Holders[i].Balance + snapshot.Holders[i].Locked
-		if totalSupply > 0 {
-			snapshot.Holders[i].Share = (float64(total) / float64(totalSupply)) * 100.0
+		// Parse maxStr as big.Int for accurate share calculation
+		maxInt := new(big.Int)
+		maxInt.SetString(maxStr, 10)
+		if maxInt.Sign() > 0 {
+			totalBig := new(big.Int).SetUint64(total)
+			share := new(big.Float).Quo(
+				new(big.Float).SetInt(totalBig),
+				new(big.Float).SetInt(maxInt),
+			)
+			share = share.Mul(share, new(big.Float).SetInt64(100))
+			shareFloat, _ := share.Float64()
+			snapshot.Holders[i].Share = shareFloat
 		}
 	}
 
-	// Fill summary
+	// Convert locked tokens to string
+	lockedStr := strconv.FormatUint(lockedTokens, 10)
+
+	// Calculate circulating supply using big.Int for accuracy
+	maxInt := new(big.Int)
+	maxInt.SetString(maxStr, 10)
+	lockedInt := new(big.Int)
+	lockedInt.SetString(lockedStr, 10)
+	circulatingInt := new(big.Int).Sub(maxInt, lockedInt)
+
+	// Fill summary with string values
 	snapshot.Summary = models.SnapshotSummary{
-		TotalSupply:       totalSupply,
+		TotalSupply:       maxStr,
 		HoldersCount:      len(snapshot.Holders),
-		LockedTokens:      lockedTokens,
-		CirculatingSupply: totalSupply - lockedTokens,
+		LockedTokens:      lockedStr,
+		CirculatingSupply: circulatingInt.String(),
 	}
+
+	log.Printf("DEBUG: Final summary - Total: %s, Holders: %d, Locked: %s, Circulating: %s",
+		maxStr, len(snapshot.Holders), lockedStr, circulatingInt.String())
 
 	return snapshot
 }
