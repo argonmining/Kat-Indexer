@@ -1,16 +1,25 @@
 package models
 
 type OperationsResponse struct {
-	Operations []Operation    `json:"operations"`
-	Pagination PaginationInfo `json:"pagination"`
+	Message string      `json:"message"`
+	Result  []Operation `json:"result"`
+	HasMore bool        `json:"hasMore"`
 }
 
 type Operation struct {
-	TxID      string `json:"txId"`
-	Type      string `json:"type"` // e.g., "transfer", "mint", "burn"
-	From      string `json:"from"`
-	To        string `json:"to"`
-	Amount    uint64 `json:"amount"`
-	Timestamp int64  `json:"timestamp"`
-	State     string `json:"state"` // success/failed
+	P          string `json:"p"`
+	Op         string `json:"op"`
+	Tick       string `json:"tick"`
+	Amt        string `json:"amt"`
+	From       string `json:"from"`
+	To         string `json:"to"`
+	OpScore    string `json:"opScore"`
+	HashRev    string `json:"hashRev"`
+	FeeRev     string `json:"feeRev"`
+	TxAccept   string `json:"txAccept"`
+	OpAccept   string `json:"opAccept"`
+	OpError    string `json:"opError"`
+	Checkpoint string `json:"checkpoint"`
+	MtsAdd     string `json:"mtsAdd"`
+	MtsMod     string `json:"mtsMod"`
 }

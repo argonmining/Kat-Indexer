@@ -44,3 +44,22 @@ type SnapshotSummary struct {
 	LockedTokens      uint64 `json:"lockedTokens"`
 	CirculatingSupply uint64 `json:"circulatingSupply"`
 }
+
+type TokenListItem struct {
+	Tick       string `json:"tick"`
+	Max        string `json:"max"`
+	Lim        string `json:"lim"`
+	Pre        string `json:"pre"`
+	To         string `json:"to"`
+	Dec        int    `json:"dec"`
+	Minted     string `json:"minted"`
+	OpScoreAdd uint64 `json:"opScoreAdd"`
+	OpScoreMod uint64 `json:"opScoreMod"`
+	State      string `json:"state"`
+	HashRev    string `json:"hashRev"`
+	MtsAdd     int64  `json:"mtsAdd"`
+}
+
+type TokenListResponse struct {
+	Result []TokenListItem `json:"result"`
+}

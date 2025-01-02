@@ -7,3 +7,5 @@ kasplex-indexer.code-workspace
 /kasplex-executor
 /sf-class2-root.crt
 /.lockExecutor
+cassandra.yaml.backup
+swagger.json

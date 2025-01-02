@@ -1,10 +1,11 @@
 package handlers
 
 import (
-	"kasplex-executor/api/models"
-	"kasplex-executor/storage"
 	"net/http"
 	"strconv"
+
+	"kasplex-executor/api/models"
+	"kasplex-executor/storage"
 )
 
 func GetTokenOperations(w http.ResponseWriter, r *http.Request) {
@@ -27,26 +28,23 @@ func GetTokenOperations(w http.ResponseWriter, r *http.Request) {
 	}
 	pageSize, _ := strconv.Atoi(r.URL.Query().Get("pageSize"))
 	if pageSize < 1 || pageSize > 2000 {
-		pageSize = 2000 // Updated default from 100 to 2000
+		pageSize = 2000
 	}
 
+	// Calculate offset
+	offset := (page - 1) * pageSize
+
 	// Get operations with pagination
-	operations, total, err := storage.GetTokenOperationsPaginated(tick, page, pageSize)
+	operations, hasMore, err := storage.GetTokenOperationsPaginated(tick, offset, pageSize)
 	if err != nil {
 		sendResponse(w, http.StatusInternalServerError, false, nil, "Failed to fetch operations: "+err.Error())
 		return
 	}
 
-	// Calculate pagination info
-	totalPages := (total + pageSize - 1) / pageSize
 	response := models.OperationsResponse{
-		Operations: operations,
-		Pagination: models.PaginationInfo{
-			CurrentPage:  page,
-			PageSize:     pageSize,
-			TotalPages:   totalPages,
-			TotalRecords: total,
-		},
+		Message: "successful",
+		HasMore: hasMore,
+		Result:  operations,
 	}
 
 	sendResponse(w, http.StatusOK, true, response, "")

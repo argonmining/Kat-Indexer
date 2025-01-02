@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"kasplex-executor/api/models"
 	"kasplex-executor/storage"
 	"net/http"
+	"strconv"
 )
 
 func GetAddressBalances(w http.ResponseWriter, r *http.Request) {
@@ -25,4 +27,60 @@ func GetAddressBalances(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sendResponse(w, http.StatusOK, true, balances, "")
+}
+
+func GetTopHolders(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		sendResponse(w, http.StatusMethodNotAllowed, false, nil, "Method not allowed")
+		return
+	}
+
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	if page < 1 {
+		page = 1
+	}
+	pageSize, _ := strconv.Atoi(r.URL.Query().Get("pageSize"))
+	if pageSize < 1 || pageSize > 2000 {
+		pageSize = 2000
+	}
+
+	holders, total, err := storage.GetTopHoldersByTokenCount(page, pageSize)
+	if err != nil {
+		sendResponse(w, http.StatusInternalServerError, false, nil, "Failed to fetch top holders: "+err.Error())
+		return
+	}
+
+	// Convert storage types to model types
+	modelHolders := make([]models.HolderPortfolio, len(holders))
+	for i, holder := range holders {
+		modelHoldings := make([]models.PortfolioHolding, len(holder.Holdings))
+		for j, holding := range holder.Holdings {
+			modelHoldings[j] = models.PortfolioHolding{
+				Tick:    holding.Tick,
+				Balance: holding.Balance,
+				Locked:  holding.Locked,
+				Dec:     holding.Dec,
+			}
+		}
+
+		modelHolders[i] = models.HolderPortfolio{
+			Address:    holder.Address,
+			TokenCount: holder.TokenCount,
+			TotalValue: holder.TotalValue,
+			Holdings:   modelHoldings,
+		}
+	}
+
+	totalPages := (total + pageSize - 1) / pageSize
+	response := models.TopHoldersResponse{
+		Holders: modelHolders,
+		Pagination: models.PaginationInfo{
+			CurrentPage:  page,
+			PageSize:     pageSize,
+			TotalPages:   totalPages,
+			TotalRecords: total,
+		},
+	}
+
+	sendResponse(w, http.StatusOK, true, response, "")
 }

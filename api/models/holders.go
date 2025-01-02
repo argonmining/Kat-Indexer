@@ -12,10 +12,3 @@ type HolderInfo struct {
 	Share   float64 `json:"share"`
 	Rank    int     `json:"rank"`
 }
-
-type PaginationInfo struct {
-	CurrentPage  int `json:"currentPage"`
-	PageSize     int `json:"pageSize"`
-	TotalPages   int `json:"totalPages"`
-	TotalRecords int `json:"totalRecords"`
-}

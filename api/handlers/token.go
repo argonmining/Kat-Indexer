@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"kasplex-executor/api/models"
 	"kasplex-executor/storage"
 	"net/http"
 )
@@ -69,6 +70,25 @@ func GetTokenInfo(w http.ResponseWriter, r *http.Request) {
 		"minted":  info.Minted,
 		"op_mod":  info.OpMod,
 		"mts_mod": info.MtsMod,
+	}
+
+	sendResponse(w, http.StatusOK, true, response, "")
+}
+
+func GetAllTokens(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		sendResponse(w, http.StatusMethodNotAllowed, false, nil, "Method not allowed")
+		return
+	}
+
+	tokens, err := storage.GetAllTokens()
+	if err != nil {
+		sendResponse(w, http.StatusInternalServerError, false, nil, "Failed to fetch tokens: "+err.Error())
+		return
+	}
+
+	response := models.TokenListResponse{
+		Result: tokens,
 	}
 
 	sendResponse(w, http.StatusOK, true, response, "")

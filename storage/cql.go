@@ -8,23 +8,15 @@ var (
 		"CREATE TABLE IF NOT EXISTS sttoken(p2tick ascii, tick ascii, meta ascii, minted ascii, opmod bigint, mtsmod bigint, PRIMARY KEY((p2tick), tick)) WITH CLUSTERING ORDER BY(tick ASC);",
 		"CREATE TABLE IF NOT EXISTS stbalance(address ascii, tick ascii, dec tinyint, balance ascii, locked ascii, opmod bigint, PRIMARY KEY((address), tick)) WITH CLUSTERING ORDER BY(tick ASC);",
 		"CREATE INDEX IF NOT EXISTS idx_stbalance_tick ON stbalance(tick);",
+		"CREATE INDEX IF NOT EXISTS idx_stbalance_balance ON stbalance(balance);",
+		"CREATE INDEX IF NOT EXISTS idx_stbalance_locked ON stbalance(locked);",
 		"CREATE TABLE IF NOT EXISTS oplist(oprange bigint, opscore bigint, txid ascii, state ascii, script ascii, tickaffc ascii, addressaffc ascii, PRIMARY KEY((oprange), opscore)) WITH CLUSTERING ORDER BY(opscore ASC);",
-		"CREATE TABLE IF NOT EXISTS opdata(txid ascii, state ascii, script ascii, stbefore ascii, stafter ascii, PRIMARY KEY((txid)));",
+		"CREATE TABLE IF NOT EXISTS opdata(txid ascii, state ascii, script ascii, stbefore ascii, stafter ascii, checkpoint ascii, PRIMARY KEY((txid)));",
 		// v2.02
 		"CREATE TABLE IF NOT EXISTS stmarket(tick ascii, taddr_utxid ascii, uaddr ascii, uamt ascii, uscript ascii, tamt ascii, opadd bigint, PRIMARY KEY((tick), taddr_utxid)) WITH CLUSTERING ORDER BY(taddr_utxid ASC);",
 		// ...
 		"CREATE INDEX IF NOT EXISTS idx_oplist_tick_score ON oplist(tickaffc);",
 		"CREATE INDEX IF NOT EXISTS idx_oplist_opscore ON oplist(opscore);",
-		// Add materialized view for operations by tick with corrected schema
-		//`CREATE MATERIALIZED VIEW IF NOT EXISTS oplist_by_tick AS
-		//	SELECT *
-		//	FROM oplist
-		//	WHERE tickaffc IS NOT NULL
-		//		AND txid IS NOT NULL
-		//		AND oprange IS NOT NULL
-		//		AND opscore IS NOT NULL
-		//	PRIMARY KEY ((tickaffc), opscore, oprange, txid)
-		//	WITH CLUSTERING ORDER BY (opscore DESC)`,
 	}
 	////////////////////////////
 	cqlnGetRuntime = "SELECT * FROM runtime WHERE key=?;"
