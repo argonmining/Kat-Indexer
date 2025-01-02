@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"kasplex-executor/api/models"
 	"log"
+	"math/big"
 	"sort"
 	"strconv"
 	"time"
@@ -78,11 +79,35 @@ func parseStringToUint64(s string) uint64 {
 }
 
 func GetTokenHoldersPaginated(tick string, page, pageSize int) ([]models.HolderInfo, int, error) {
+	// First get token info to get max supply
+	tokenInfo, err := GetTokenInfo(tick)
+	if err != nil {
+		log.Printf("ERROR: Failed to get token info for %s: %v", tick, err)
+		return nil, 0, err
+	}
+
+	// Parse meta to get max supply
+	var metaData map[string]interface{}
+	if err := json.Unmarshal([]byte(tokenInfo.Meta), &metaData); err != nil {
+		log.Printf("ERROR: Failed to parse meta for tick %s: %v", tick, err)
+		return nil, 0, err
+	}
+
+	maxStr, ok := metaData["max"].(string)
+	if !ok {
+		log.Printf("ERROR: Max value not found or not a string in meta for tick %s", tick)
+		return nil, 0, err
+	}
+
+	// Parse max supply using big.Int
+	maxInt := new(big.Int)
+	maxInt.SetString(maxStr, 10)
+
 	// Use existing index on stbalance table
 	query := sRuntime.sessionCassa.Query(`
 		SELECT address, balance, locked 
 		FROM stbalance 
-		WHERE tick = ? 
+			WHERE tick = ? 
 		ALLOW FILTERING`,
 		tick,
 	).PageSize(2000)
@@ -90,9 +115,8 @@ func GetTokenHoldersPaginated(tick string, page, pageSize int) ([]models.HolderI
 	iter := query.Iter()
 	var address, balance, locked string
 	holders := make([]models.HolderInfo, 0, 2000)
-	var totalSupply uint64
 
-	// First pass: collect all non-zero balances and calculate total supply
+	// Collect all non-zero balances
 	for iter.Scan(&address, &balance, &locked) {
 		bal := parseStringToUint64(balance)
 		lock := parseStringToUint64(locked)
@@ -103,7 +127,6 @@ func GetTokenHoldersPaginated(tick string, page, pageSize int) ([]models.HolderI
 				Balance: bal,
 				Locked:  lock,
 			})
-			totalSupply += total
 		}
 	}
 
@@ -126,11 +149,20 @@ func GetTokenHoldersPaginated(tick string, page, pageSize int) ([]models.HolderI
 		end = total
 	}
 
-	// Calculate ranks and shares for the page
+	// Calculate ranks and shares for the page using big.Int/big.Float for accuracy
 	for i := start; i < end; i++ {
 		total := holders[i].Balance + holders[i].Locked
 		holders[i].Rank = i + 1
-		holders[i].Share = float64(total) / float64(totalSupply) * 100
+
+		// Calculate share using big numbers
+		totalBig := new(big.Int).SetUint64(total)
+		share := new(big.Float).Quo(
+			new(big.Float).SetInt(totalBig),
+			new(big.Float).SetInt(maxInt),
+		)
+		share = share.Mul(share, new(big.Float).SetInt64(100))
+		shareFloat, _ := share.Float64()
+		holders[i].Share = shareFloat
 	}
 
 	return holders[start:end], total, nil
