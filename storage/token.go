@@ -172,17 +172,17 @@ func GetTokenHoldersPaginated(tick string, page, pageSize int) ([]models.HolderI
 func GetTokenOperationsPaginated(tick string, offset, pageSize int) ([]models.Operation, bool, error) {
 	log.Printf("Fetching operations for tick: %s, offset: %d, pageSize: %d", tick, offset, pageSize)
 
-	// Query using the index on tickaffc
+	// Query the materialized view which is already ordered by opscore DESC
 	query := sRuntime.sessionCassa.Query(`
 		SELECT oprange, opscore, txid, state, script, tickaffc, addressaffc 
-		FROM oplist 
+		FROM oplist_by_tick 
 		WHERE tickaffc >= ? AND tickaffc < ?
 		LIMIT ?
 		ALLOW FILTERING`,
-		tick+"=",   // Start of range
+		tick+"=",   // Start of range (e.g., "NACHO=")
 		tick+"=~",  // End of range (~ comes after any digit in ASCII)
-		pageSize+1, // Get one extra record to determine if there are more pages
-	).PageSize(pageSize + 1)
+		pageSize+1, // Get one extra to determine if there are more pages
+	).PageSize(pageSize + 1).RetryPolicy(&gocql.SimpleRetryPolicy{NumRetries: 3})
 
 	iter := query.Iter()
 	var oprange int64
@@ -190,8 +190,15 @@ func GetTokenOperationsPaginated(tick string, offset, pageSize int) ([]models.Op
 	var txid, state, script, tickAffc, addressaffc string
 	operations := make([]models.Operation, 0, pageSize)
 	hasMore := false
+	recordCount := 0
 
 	for iter.Scan(&oprange, &opScore, &txid, &state, &script, &tickAffc, &addressaffc) {
+		// Skip records for pagination
+		if recordCount < offset {
+			recordCount++
+			continue
+		}
+
 		// If we've got more than pageSize records, just set hasMore and break
 		if len(operations) >= pageSize {
 			hasMore = true
@@ -199,13 +206,13 @@ func GetTokenOperationsPaginated(tick string, offset, pageSize int) ([]models.Op
 		}
 
 		// Get detailed operation data from opdata table
-		var opdataState, opdataScript, stBefore, stAfter string
+		var opdataState, opdataScript string
 		err := sRuntime.sessionCassa.Query(`
-			SELECT state, script, stbefore, stafter 
+			SELECT state, script
 			FROM opdata 
 			WHERE txid = ?`,
 			txid,
-		).Scan(&opdataState, &opdataScript, &stBefore, &stAfter)
+		).Scan(&opdataState, &opdataScript)
 
 		if err != nil {
 			if err != gocql.ErrNotFound {
@@ -222,32 +229,64 @@ func GetTokenOperationsPaginated(tick string, offset, pageSize int) ([]models.Op
 			continue
 		}
 
-		op := models.Operation{
-			P:          scriptData["p"].(string),
-			Op:         scriptData["op"].(string),
-			Tick:       scriptData["tick"].(string),
-			Amt:        scriptData["amt"].(string),
-			From:       scriptData["from"].(string),
-			To:         scriptData["to"].(string),
-			OpScore:    strconv.FormatUint(opScore, 10),
-			HashRev:    txid,
-			FeeRev:     "0",
-			TxAccept:   "1",
-			OpAccept:   opdataState,
-			OpError:    "",
-			Checkpoint: "",
-			MtsAdd:     strconv.FormatInt(time.Now().UnixMilli(), 10),
-			MtsMod:     strconv.FormatInt(time.Now().UnixMilli(), 10),
+		// Parse state to get fee and tx details
+		var stateData map[string]interface{}
+		if err := json.Unmarshal([]byte(opdataState), &stateData); err != nil {
+			log.Printf("Error parsing state JSON for txid %s: %v", txid, err)
+			continue
 		}
 
+		// Initialize operation with safe defaults
+		op := models.Operation{
+			HashRev:  txid,
+			OpAccept: opdataState,
+			OpError:  "",
+			MtsAdd:   strconv.FormatInt(time.Now().UnixMilli(), 10),
+			MtsMod:   strconv.FormatInt(time.Now().UnixMilli(), 10),
+		}
+
+		// Extract values from stateData
+		if fee, ok := stateData["fee"].(float64); ok {
+			op.FeeRev = strconv.FormatFloat(fee, 'f', 0, 64)
+		}
+		if feeLeast, ok := stateData["feeleast"].(float64); ok {
+			op.FeeLeast = strconv.FormatFloat(feeLeast, 'f', 0, 64)
+		}
+		if opAccept, ok := stateData["opaccept"].(float64); ok {
+			op.TxAccept = strconv.FormatFloat(opAccept, 'f', 0, 64)
+		}
+
+		// Safely extract values from scriptData
+		if p, ok := scriptData["p"].(string); ok {
+			op.P = p
+		}
+		if opType, ok := scriptData["op"].(string); ok {
+			op.Op = opType
+		}
+		if tickVal, ok := scriptData["tick"].(string); ok {
+			op.Tick = tickVal
+		}
+		if amt, ok := scriptData["amt"].(string); ok {
+			op.Amt = amt
+		}
+		if from, ok := scriptData["from"].(string); ok {
+			op.From = from
+		}
+		if to, ok := scriptData["to"].(string); ok {
+			op.To = to
+		}
+
+		op.OpScore = strconv.FormatUint(opScore, 10)
 		operations = append(operations, op)
+		recordCount++
 	}
 
 	if err := iter.Close(); err != nil {
 		log.Printf("Error closing iterator: %v", err)
-		return nil, false, err
+		return nil, false, fmt.Errorf("failed to fetch operations: %v", err)
 	}
 
+	log.Printf("Successfully fetched %d operations for tick %s", len(operations), tick)
 	return operations, hasMore, nil
 }
 

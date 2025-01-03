@@ -14,9 +14,15 @@ var (
 		"CREATE TABLE IF NOT EXISTS opdata(txid ascii, state ascii, script ascii, stbefore ascii, stafter ascii, checkpoint ascii, PRIMARY KEY((txid)));",
 		// v2.02
 		"CREATE TABLE IF NOT EXISTS stmarket(tick ascii, taddr_utxid ascii, uaddr ascii, uamt ascii, uscript ascii, tamt ascii, opadd bigint, PRIMARY KEY((tick), taddr_utxid)) WITH CLUSTERING ORDER BY(taddr_utxid ASC);",
-		// ...
 		"CREATE INDEX IF NOT EXISTS idx_oplist_tick_score ON oplist(tickaffc);",
 		"CREATE INDEX IF NOT EXISTS idx_oplist_opscore ON oplist(opscore);",
+		// v2.03 - Add materialized view for efficient token operations queries
+		`CREATE MATERIALIZED VIEW IF NOT EXISTS oplist_by_tick AS
+			SELECT *
+			FROM oplist
+			WHERE tickaffc IS NOT NULL AND oprange IS NOT NULL AND opscore IS NOT NULL
+			PRIMARY KEY ((tickaffc), opscore, oprange)
+			WITH CLUSTERING ORDER BY (opscore DESC, oprange ASC)`,
 	}
 	////////////////////////////
 	cqlnGetRuntime = "SELECT * FROM runtime WHERE key=?;"
