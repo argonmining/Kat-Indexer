@@ -296,3 +296,65 @@ func GetAllTokens() ([]models.TokenListItem, error) {
 	log.Printf("INFO: Found %d tokens in total", len(tokens))
 	return tokens, nil
 }
+
+// GetOperationByHash retrieves a single operation by its transaction hash
+func GetOperationByHash(hash string) (*models.Operation, error) {
+	// Get detailed operation data from opdata table
+	var state, script, stBefore, stAfter string
+	err := sRuntime.sessionCassa.Query(`
+		SELECT state, script, stbefore, stafter 
+		FROM opdata 
+		WHERE txid = ?`,
+		hash,
+	).Scan(&state, &script, &stBefore, &stAfter)
+
+	if err != nil {
+		if err == gocql.ErrNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	// Parse script to get operation details
+	var scriptData map[string]interface{}
+	if err := json.Unmarshal([]byte(script), &scriptData); err != nil {
+		return nil, err
+	}
+
+	// Get additional operation data from oplist
+	var oprange int64
+	var opScore uint64
+	var tickAffc, addressaffc string
+	err = sRuntime.sessionCassa.Query(`
+		SELECT oprange, opscore, tickaffc, addressaffc 
+		FROM oplist 
+		WHERE txid = ?
+		ALLOW FILTERING`,
+		hash,
+	).Scan(&oprange, &opScore, &tickAffc, &addressaffc)
+
+	if err != nil && err != gocql.ErrNotFound {
+		return nil, err
+	}
+
+	// Create operation response
+	operation := &models.Operation{
+		P:          scriptData["p"].(string),
+		Op:         scriptData["op"].(string),
+		Tick:       scriptData["tick"].(string),
+		Amt:        scriptData["amt"].(string),
+		From:       scriptData["from"].(string),
+		To:         scriptData["to"].(string),
+		OpScore:    strconv.FormatUint(opScore, 10),
+		HashRev:    hash,
+		FeeRev:     "0",
+		TxAccept:   "1",
+		OpAccept:   state,
+		OpError:    "",
+		Checkpoint: "",
+		MtsAdd:     strconv.FormatInt(time.Now().UnixMilli(), 10),
+		MtsMod:     strconv.FormatInt(time.Now().UnixMilli(), 10),
+	}
+
+	return operation, nil
+}

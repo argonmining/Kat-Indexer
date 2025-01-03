@@ -51,6 +51,7 @@ func (s *Server) Start(stop chan struct{}) error {
 	mux.HandleFunc("/api/v1/token/operations", handlers.GetTokenOperations)
 	mux.HandleFunc("/api/v1/tokens", handlers.GetAllTokens)
 	mux.HandleFunc("/api/v1/holders/top", handlers.GetTopHolders)
+	mux.HandleFunc("/api/v1/transaction", handlers.GetTransaction)
 
 	s.logger.Printf("All routes registered")
 
