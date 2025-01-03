@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
 
@@ -41,14 +42,36 @@ func GetTokenOperations(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create response with operations and hasMore
-	response := struct {
-		Operations []models.Operation `json:"operations"`
-		HasMore    bool               `json:"hasMore"`
-	}{
-		Operations: operations,
-		HasMore:    hasMore,
+	// Process each operation to extract data from opAccept
+	for i := range operations {
+		if operations[i].OpAccept != "" {
+			var opAcceptData map[string]interface{}
+			if err := json.Unmarshal([]byte(operations[i].OpAccept), &opAcceptData); err != nil {
+				continue
+			}
+
+			// Extract values from opAcceptData
+			if blockAccept, ok := opAcceptData["blockaccept"].(string); ok {
+				operations[i].BlockAccept = blockAccept
+			}
+			if feeLeast, ok := opAcceptData["feeleast"].(float64); ok {
+				operations[i].FeeLeast = strconv.FormatFloat(feeLeast, 'f', 0, 64)
+			}
+			if checkpoint, ok := opAcceptData["checkpoint"].(string); ok {
+				operations[i].Checkpoint = checkpoint
+			}
+
+			// Clear the opAccept field as we've extracted all needed data
+			operations[i].OpAccept = ""
+		}
 	}
 
-	sendResponse(w, http.StatusOK, true, response, "")
+	// Create pagination info
+	paginationInfo := &models.PaginationInfo{
+		CurrentPage: page,
+		PageSize:    pageSize,
+		HasMore:     hasMore,
+	}
+
+	sendPaginatedResponse(w, http.StatusOK, true, operations, paginationInfo, "")
 }
