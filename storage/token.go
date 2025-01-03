@@ -2,6 +2,7 @@ package storage
 
 import (
 	"encoding/json"
+	"fmt"
 	"kasplex-executor/api/models"
 	"log"
 	"math/big"
@@ -299,62 +300,101 @@ func GetAllTokens() ([]models.TokenListItem, error) {
 
 // GetOperationByHash retrieves a single operation by its transaction hash
 func GetOperationByHash(hash string) (*models.Operation, error) {
+	log.Printf("DEBUG: Fetching operation for hash: %s", hash)
+
 	// Get detailed operation data from opdata table
-	var state, script, stBefore, stAfter string
+	var state, script string
 	err := sRuntime.sessionCassa.Query(`
-		SELECT state, script, stbefore, stafter 
+		SELECT state, script
 		FROM opdata 
 		WHERE txid = ?`,
 		hash,
-	).Scan(&state, &script, &stBefore, &stAfter)
+	).Scan(&state, &script)
 
 	if err != nil {
 		if err == gocql.ErrNotFound {
+			log.Printf("DEBUG: No operation found for hash: %s", hash)
 			return nil, nil
 		}
+		log.Printf("ERROR: Failed to fetch from opdata for hash %s: %v", hash, err)
 		return nil, err
 	}
 
 	// Parse script to get operation details
 	var scriptData map[string]interface{}
 	if err := json.Unmarshal([]byte(script), &scriptData); err != nil {
-		return nil, err
+		log.Printf("ERROR: Failed to parse script JSON for hash %s: %v", hash, err)
+		return nil, fmt.Errorf("failed to parse operation data: %v", err)
 	}
 
-	// Get additional operation data from oplist
-	var oprange int64
-	var opScore uint64
-	var tickAffc, addressaffc string
-	err = sRuntime.sessionCassa.Query(`
-		SELECT oprange, opscore, tickaffc, addressaffc 
-		FROM oplist 
-		WHERE txid = ?
-		ALLOW FILTERING`,
-		hash,
-	).Scan(&oprange, &opScore, &tickAffc, &addressaffc)
-
-	if err != nil && err != gocql.ErrNotFound {
-		return nil, err
+	// Parse state to get additional details
+	var stateData map[string]interface{}
+	if err := json.Unmarshal([]byte(state), &stateData); err != nil {
+		log.Printf("ERROR: Failed to parse state JSON for hash %s: %v", hash, err)
+		return nil, fmt.Errorf("failed to parse state data: %v", err)
 	}
 
-	// Create operation response
+	// Initialize operation with data from state
 	operation := &models.Operation{
-		P:          scriptData["p"].(string),
-		Op:         scriptData["op"].(string),
-		Tick:       scriptData["tick"].(string),
-		Amt:        scriptData["amt"].(string),
-		From:       scriptData["from"].(string),
-		To:         scriptData["to"].(string),
-		OpScore:    strconv.FormatUint(opScore, 10),
-		HashRev:    hash,
-		FeeRev:     "0",
-		TxAccept:   "1",
-		OpAccept:   state,
-		OpError:    "",
-		Checkpoint: "",
-		MtsAdd:     strconv.FormatInt(time.Now().UnixMilli(), 10),
-		MtsMod:     strconv.FormatInt(time.Now().UnixMilli(), 10),
+		HashRev:  hash,
+		OpAccept: "", // We'll clear this since we're extracting the data
+		OpError:  "", // Will be populated if there's an error in state
+		MtsAdd:   strconv.FormatInt(time.Now().UnixMilli(), 10),
+		MtsMod:   strconv.FormatInt(time.Now().UnixMilli(), 10),
 	}
 
+	// Extract values from stateData
+	if fee, ok := stateData["fee"].(float64); ok {
+		operation.FeeRev = strconv.FormatFloat(fee, 'f', 0, 64)
+	}
+	if feeLeast, ok := stateData["feeleast"].(float64); ok {
+		operation.FeeLeast = strconv.FormatFloat(feeLeast, 'f', 0, 64)
+	}
+	if opAccept, ok := stateData["opaccept"].(float64); ok {
+		operation.TxAccept = strconv.FormatFloat(opAccept, 'f', 0, 64)
+	}
+	if blockAccept, ok := stateData["blockaccept"].(string); ok {
+		operation.BlockAccept = blockAccept
+	}
+	if checkpoint, ok := stateData["checkpoint"].(string); ok {
+		operation.Checkpoint = checkpoint
+	}
+
+	// Safely extract required fields from script
+	if p, ok := scriptData["p"].(string); ok {
+		operation.P = p
+	}
+	if op, ok := scriptData["op"].(string); ok {
+		operation.Op = op
+	}
+	if tick, ok := scriptData["tick"].(string); ok {
+		operation.Tick = tick
+	}
+	if amt, ok := scriptData["amt"].(string); ok {
+		operation.Amt = amt
+	}
+	if from, ok := scriptData["from"].(string); ok {
+		operation.From = from
+	}
+	if to, ok := scriptData["to"].(string); ok {
+		operation.To = to
+	}
+
+	// Try to get additional operation data from oplist, but don't fail if not found
+	var opScore uint64
+	err = sRuntime.sessionCassa.Query(`
+		SELECT opscore
+		FROM oplist 
+		WHERE txid = ?`,
+		hash,
+	).Scan(&opScore)
+
+	if err == nil {
+		operation.OpScore = strconv.FormatUint(opScore, 10)
+	} else if err != gocql.ErrNotFound {
+		log.Printf("WARN: Could not fetch opscore for hash %s: %v", hash, err)
+	}
+
+	log.Printf("DEBUG: Successfully fetched operation for hash: %s", hash)
 	return operation, nil
 }
