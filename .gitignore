@@ -9,3 +9,5 @@ kasplex-indexer.code-workspace
 /.lockExecutor
 cassandra.yaml.backup
 swagger.json
+katapiSwagger.json
+katapiExamples.md
