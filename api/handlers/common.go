@@ -11,7 +11,20 @@ func sendResponse(w http.ResponseWriter, status int, success bool, data interfac
 	response := models.TokenResponse{
 		Success: success,
 		Error:   errMsg,
-		Data:    data,
+		Result:  data,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(response)
+}
+
+func sendPaginatedResponse(w http.ResponseWriter, status int, success bool, data interface{}, pagination *models.PaginationInfo, errMsg string) {
+	response := models.TokenResponse{
+		Success:    success,
+		Error:      errMsg,
+		Result:     data,
+		Pagination: pagination,
 	}
 
 	w.Header().Set("Content-Type", "application/json")

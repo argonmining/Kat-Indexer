@@ -41,10 +41,13 @@ func GetTokenOperations(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response := models.OperationsResponse{
-		Message: "successful",
-		HasMore: hasMore,
-		Result:  operations,
+	// Create response with operations and hasMore
+	response := struct {
+		Operations []models.Operation `json:"operations"`
+		HasMore    bool               `json:"hasMore"`
+	}{
+		Operations: operations,
+		HasMore:    hasMore,
 	}
 
 	sendResponse(w, http.StatusOK, true, response, "")

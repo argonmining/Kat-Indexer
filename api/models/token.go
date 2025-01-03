@@ -16,17 +16,18 @@ type TokenInfo struct {
 }
 
 type TokenResponse struct {
-	Success bool        `json:"success"`
-	Error   string      `json:"error,omitempty"`
-	Data    interface{} `json:"data,omitempty"`
+	Success    bool            `json:"success"`
+	Error      string          `json:"error,omitempty"`
+	Pagination *PaginationInfo `json:"pagination,omitempty"`
+	Result     interface{}     `json:"result,omitempty"`
 }
 
 // TokenSnapshot represents a complete snapshot of token holders
 type TokenSnapshot struct {
 	Tick      string          `json:"tick"`
 	Timestamp int64           `json:"timestamp"`
-	Holders   []TokenHolder   `json:"holders"`
 	Summary   SnapshotSummary `json:"summary"`
+	Holders   []TokenHolder   `json:"holders"`
 }
 
 // TokenHolder represents a single holder's balance

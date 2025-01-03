@@ -59,8 +59,8 @@ func processSnapshot(tick string, balances []*models.TokenBalance, tokenInfo *mo
 	snapshot := &models.TokenSnapshot{
 		Tick:      tick,
 		Timestamp: time.Now().Unix(),
-		Holders:   make([]models.TokenHolder, 0),
 		Summary:   models.SnapshotSummary{},
+		Holders:   make([]models.TokenHolder, 0),
 	}
 
 	// Parse token max from meta
@@ -141,4 +141,69 @@ func processSnapshot(tick string, balances []*models.TokenBalance, tokenInfo *mo
 		maxStr, len(snapshot.Holders), lockedStr, circulatingInt.String())
 
 	return snapshot
+}
+
+// GetTokenCirculatingSupply returns only the circulating supply for a given token
+func GetTokenCirculatingSupply(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		sendResponse(w, http.StatusMethodNotAllowed, false, nil, "Method not allowed")
+		return
+	}
+
+	// Get and validate the tick parameter
+	tick := sanitizeString(r.URL.Query().Get("tick"))
+	if !validateTick(tick) {
+		sendResponse(w, http.StatusBadRequest, false, nil, "Invalid tick parameter: must be 4-6 uppercase letters (A-Z)")
+		return
+	}
+
+	// Get token info to get the max supply
+	tokenInfo, err := storage.GetTokenInfo(tick)
+	if err != nil {
+		sendResponse(w, http.StatusInternalServerError, false, nil, "Failed to fetch token info: "+err.Error())
+		return
+	}
+
+	// Parse token max from meta
+	var metaData map[string]interface{}
+	if err := json.Unmarshal([]byte(tokenInfo.Meta), &metaData); err != nil {
+		sendResponse(w, http.StatusInternalServerError, false, nil, "Failed to parse meta data")
+		return
+	}
+
+	maxStr, ok := metaData["max"].(string)
+	if !ok {
+		sendResponse(w, http.StatusInternalServerError, false, nil, "Max value not found or invalid in token metadata")
+		return
+	}
+
+	// Get token balances to calculate locked tokens
+	balances, err := storage.GetTokenBalances(tick)
+	if err != nil {
+		sendResponse(w, http.StatusInternalServerError, false, nil, "Failed to fetch token balances")
+		return
+	}
+
+	// Calculate total locked tokens
+	var lockedTokens uint64
+	for _, balance := range balances {
+		lockedTokens += balance.Locked
+	}
+
+	// Convert locked tokens to string for big number operations
+	lockedStr := strconv.FormatUint(lockedTokens, 10)
+
+	// Calculate circulating supply using big.Int for accuracy
+	maxInt := new(big.Int)
+	maxInt.SetString(maxStr, 10)
+	lockedInt := new(big.Int)
+	lockedInt.SetString(lockedStr, 10)
+	circulatingInt := new(big.Int).Sub(maxInt, lockedInt)
+
+	// Create response with just the circulating supply
+	response := map[string]string{
+		"circulatingSupply": circulatingInt.String(),
+	}
+
+	sendResponse(w, http.StatusOK, true, response, "")
 }

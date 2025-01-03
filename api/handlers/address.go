@@ -72,15 +72,12 @@ func GetTopHolders(w http.ResponseWriter, r *http.Request) {
 	}
 
 	totalPages := (total + pageSize - 1) / pageSize
-	response := models.TopHoldersResponse{
-		Holders: modelHolders,
-		Pagination: models.PaginationInfo{
-			CurrentPage:  page,
-			PageSize:     pageSize,
-			TotalPages:   totalPages,
-			TotalRecords: total,
-		},
+	paginationInfo := &models.PaginationInfo{
+		CurrentPage:  page,
+		PageSize:     pageSize,
+		TotalPages:   totalPages,
+		TotalRecords: total,
 	}
 
-	sendResponse(w, http.StatusOK, true, response, "")
+	sendPaginatedResponse(w, http.StatusOK, true, modelHolders, paginationInfo, "")
 }

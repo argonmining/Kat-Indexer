@@ -39,15 +39,13 @@ func GetTokenHolders(w http.ResponseWriter, r *http.Request) {
 
 	// Calculate pagination info
 	totalPages := (total + pageSize - 1) / pageSize
-	response := models.HoldersResponse{
-		Holders: holders,
-		Pagination: models.PaginationInfo{
-			CurrentPage:  page,
-			PageSize:     pageSize,
-			TotalPages:   totalPages,
-			TotalRecords: total,
-		},
+	paginationInfo := &models.PaginationInfo{
+		CurrentPage:  page,
+		PageSize:     pageSize,
+		TotalPages:   totalPages,
+		TotalRecords: total,
 	}
 
-	sendResponse(w, http.StatusOK, true, response, "")
+	// Send the holders slice directly as the result
+	sendPaginatedResponse(w, http.StatusOK, true, holders, paginationInfo, "")
 }

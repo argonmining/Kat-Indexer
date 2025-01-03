@@ -41,14 +41,11 @@ func (s *Server) Start(stop chan struct{}) error {
 	// Debug logging
 	s.logger.Printf("Starting route registration...")
 
-	// Register snapshot endpoint first
-	snapshotHandler := http.HandlerFunc(handlers.GetTokenSnapshot)
-	mux.Handle("/api/v1/token/snapshot", snapshotHandler)
-	s.logger.Printf("Registered: /api/v1/token/snapshot")
-
-	// Other endpoints
+	// Register all endpoints
+	mux.HandleFunc("/api/v1/token/snapshot", handlers.GetTokenSnapshot)
 	mux.HandleFunc("/api/v1/token/balances", handlers.GetTokenBalances)
 	mux.HandleFunc("/api/v1/token/info", handlers.GetTokenInfo)
+	mux.HandleFunc("/api/v1/token/circulating-supply", handlers.GetTokenCirculatingSupply)
 	mux.HandleFunc("/api/v1/address/balances", handlers.GetAddressBalances)
 	mux.HandleFunc("/api/v1/token/holders", handlers.GetTokenHolders)
 	mux.HandleFunc("/api/v1/token/operations", handlers.GetTokenOperations)

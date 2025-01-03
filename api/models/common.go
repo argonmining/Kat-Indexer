@@ -4,13 +4,17 @@ package models
 type Response struct {
 	Success bool        `json:"success"`
 	Error   string      `json:"error,omitempty"`
-	Data    interface{} `json:"data,omitempty"`
+	Result  interface{} `json:"result,omitempty"`
 }
 
-// Shared pagination structure
+// PaginationInfo provides standardized pagination information across all endpoints.
+// Some fields are optional depending on the pagination type:
+// - For total-based pagination: TotalPages and TotalRecords are used
+// - For cursor-based pagination: HasMore is used
 type PaginationInfo struct {
-	CurrentPage  int `json:"currentPage"`
-	PageSize     int `json:"pageSize"`
-	TotalPages   int `json:"totalPages"`
-	TotalRecords int `json:"totalRecords"`
+	CurrentPage  int  `json:"currentPage"`
+	PageSize     int  `json:"pageSize"`
+	TotalPages   int  `json:"totalPages,omitempty"`
+	TotalRecords int  `json:"totalRecords,omitempty"`
+	HasMore      bool `json:"hasMore,omitempty"`
 }
