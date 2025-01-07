@@ -23,54 +23,30 @@ func GetTokenOperations(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Parse pagination parameters
-	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
-	if page < 1 {
-		page = 1
-	}
 	pageSize, _ := strconv.Atoi(r.URL.Query().Get("pageSize"))
 	if pageSize < 1 || pageSize > 2000 {
 		pageSize = 2000
 	}
 
-	// Calculate offset
-	offset := (page - 1) * pageSize
+	// Parse lastScore if provided
+	var lastScore *uint64
+	if lastScoreStr := r.URL.Query().Get("lastScore"); lastScoreStr != "" {
+		if score, err := strconv.ParseUint(lastScoreStr, 10, 64); err == nil {
+			lastScore = &score
+		}
+	}
 
 	// Get operations with pagination
-	operations, hasMore, err := storage.GetTokenOperationsPaginated(tick, offset, pageSize)
+	operations, hasMore, err := storage.GetTokenOperationsPaginated(tick, lastScore, pageSize)
 	if err != nil {
 		sendResponse(w, http.StatusInternalServerError, false, nil, "Failed to fetch operations: "+err.Error())
 		return
 	}
 
-	// Process each operation to extract data from opAccept
-	for i := range operations {
-		if operations[i].OpAccept != "" {
-			var opAcceptData map[string]interface{}
-			if err := json.Unmarshal([]byte(operations[i].OpAccept), &opAcceptData); err != nil {
-				continue
-			}
-
-			// Extract values from opAcceptData
-			if blockAccept, ok := opAcceptData["blockaccept"].(string); ok {
-				operations[i].BlockAccept = blockAccept
-			}
-			if feeLeast, ok := opAcceptData["feeleast"].(float64); ok {
-				operations[i].FeeLeast = strconv.FormatFloat(feeLeast, 'f', 0, 64)
-			}
-			if checkpoint, ok := opAcceptData["checkpoint"].(string); ok {
-				operations[i].Checkpoint = checkpoint
-			}
-
-			// Clear the opAccept field as we've extracted all needed data
-			operations[i].OpAccept = ""
-		}
-	}
-
 	// Create pagination info
 	paginationInfo := &models.PaginationInfo{
-		CurrentPage: page,
-		PageSize:    pageSize,
-		HasMore:     hasMore,
+		PageSize: pageSize,
+		HasMore:  hasMore,
 	}
 
 	sendPaginatedResponse(w, http.StatusOK, true, operations, paginationInfo, "")

@@ -12,7 +12,7 @@ type Response struct {
 // - For total-based pagination: TotalPages and TotalRecords are used
 // - For cursor-based pagination: HasMore is used
 type PaginationInfo struct {
-	CurrentPage  int  `json:"currentPage"`
+	CurrentPage  int  `json:"currentPage,omitempty"`
 	PageSize     int  `json:"pageSize"`
 	TotalPages   int  `json:"totalPages,omitempty"`
 	TotalRecords int  `json:"totalRecords,omitempty"`

@@ -169,20 +169,43 @@ func GetTokenHoldersPaginated(tick string, page, pageSize int) ([]models.HolderI
 	return holders[start:end], total, nil
 }
 
-func GetTokenOperationsPaginated(tick string, offset, pageSize int) ([]models.Operation, bool, error) {
-	log.Printf("Fetching operations for tick: %s, offset: %d, pageSize: %d", tick, offset, pageSize)
+func GetTokenOperationsPaginated(tick string, lastScore *uint64, pageSize int) ([]models.Operation, bool, error) {
+	log.Printf("Fetching operations for tick: %s, lastScore: %v, pageSize: %d", tick, lastScore, pageSize)
 
-	// Query the materialized view which is already ordered by opscore DESC
-	query := sRuntime.sessionCassa.Query(`
-		SELECT oprange, opscore, txid, state, script, tickaffc, addressaffc 
-		FROM oplist_by_tick 
-		WHERE tickaffc >= ? AND tickaffc < ?
-		LIMIT ?
-		ALLOW FILTERING`,
-		tick+"=",   // Start of range (e.g., "NACHO=")
-		tick+"=~",  // End of range (~ comes after any digit in ASCII)
-		pageSize+1, // Get one extra to determine if there are more pages
-	).PageSize(pageSize + 1).RetryPolicy(&gocql.SimpleRetryPolicy{NumRetries: 3})
+	var query *gocql.Query
+	if lastScore == nil {
+		// First page query - get the newest operations
+		query = sRuntime.sessionCassa.Query(`
+			SELECT oprange, opscore, txid, state, script, tickaffc, addressaffc 
+			FROM oplist_by_tick 
+			WHERE tickaffc >= ? AND tickaffc < ?
+			LIMIT ?
+			ALLOW FILTERING`,
+			tick+"=",  // Start of range (e.g., "NACHO=")
+			tick+"=~", // End of range (~ comes after any digit in ASCII)
+			pageSize+1,
+		)
+	} else {
+		// Query for the next page using the provided cursor
+		query = sRuntime.sessionCassa.Query(`
+			SELECT oprange, opscore, txid, state, script, tickaffc, addressaffc 
+			FROM oplist_by_tick 
+			WHERE tickaffc >= ? AND tickaffc < ? AND opscore < ?
+			LIMIT ?
+			ALLOW FILTERING`,
+			tick+"=",  // Start of range (e.g., "NACHO=")
+			tick+"=~", // End of range (~ comes after any digit in ASCII)
+			*lastScore,
+			pageSize+1,
+		)
+	}
+
+	// Set query options
+	query = query.PageSize(pageSize + 1).RetryPolicy(&gocql.ExponentialBackoffRetryPolicy{
+		Min:        time.Second,
+		Max:        10 * time.Second,
+		NumRetries: 5,
+	})
 
 	iter := query.Iter()
 	var oprange int64
@@ -190,17 +213,11 @@ func GetTokenOperationsPaginated(tick string, offset, pageSize int) ([]models.Op
 	var txid, state, script, tickAffc, addressaffc string
 	operations := make([]models.Operation, 0, pageSize)
 	hasMore := false
-	recordCount := 0
+	count := 0
 
 	for iter.Scan(&oprange, &opScore, &txid, &state, &script, &tickAffc, &addressaffc) {
-		// Skip records for pagination
-		if recordCount < offset {
-			recordCount++
-			continue
-		}
-
 		// If we've got more than pageSize records, just set hasMore and break
-		if len(operations) >= pageSize {
+		if count >= pageSize {
 			hasMore = true
 			break
 		}
@@ -212,7 +229,7 @@ func GetTokenOperationsPaginated(tick string, offset, pageSize int) ([]models.Op
 			FROM opdata 
 			WHERE txid = ?`,
 			txid,
-		).Scan(&opdataState, &opdataScript)
+		).Consistency(gocql.One).Scan(&opdataState, &opdataScript)
 
 		if err != nil {
 			if err != gocql.ErrNotFound {
@@ -278,7 +295,7 @@ func GetTokenOperationsPaginated(tick string, offset, pageSize int) ([]models.Op
 
 		op.OpScore = strconv.FormatUint(opScore, 10)
 		operations = append(operations, op)
-		recordCount++
+		count++
 	}
 
 	if err := iter.Close(); err != nil {
@@ -286,7 +303,8 @@ func GetTokenOperationsPaginated(tick string, offset, pageSize int) ([]models.Op
 		return nil, false, fmt.Errorf("failed to fetch operations: %v", err)
 	}
 
-	log.Printf("Successfully fetched %d operations for tick %s", len(operations), tick)
+	log.Printf("Successfully fetched %d operations for tick %s (hasMore: %v, lastScore: %v)",
+		len(operations), tick, hasMore, opScore)
 	return operations, hasMore, nil
 }
 
