@@ -91,8 +91,8 @@ func GetAllAddresses(w http.ResponseWriter, r *http.Request) {
 
 	// Parse pagination parameters
 	pageSize, _ := strconv.Atoi(r.URL.Query().Get("pageSize"))
-	if pageSize < 1 || pageSize > 2000 {
-		pageSize = 100 // Default to 100 like transactions
+	if pageSize < 1 || pageSize > 5000 {
+		pageSize = 100
 	}
 
 	// Parse lastAddress if provided for cursor-based pagination
