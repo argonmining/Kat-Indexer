@@ -100,3 +100,40 @@ func GetTransaction(w http.ResponseWriter, r *http.Request) {
 
 	sendResponse(w, http.StatusOK, true, operation, "")
 }
+
+// GetAllTransactions returns all transactions with pagination support
+func GetAllTransactions(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		sendResponse(w, http.StatusMethodNotAllowed, false, nil, "Method not allowed")
+		return
+	}
+
+	// Parse pagination parameters
+	pageSize, _ := strconv.Atoi(r.URL.Query().Get("pageSize"))
+	if pageSize < 1 || pageSize > 2000 {
+		pageSize = 100
+	}
+
+	// Parse lastScore if provided
+	var lastScore *uint64
+	if lastScoreStr := r.URL.Query().Get("lastScore"); lastScoreStr != "" {
+		if score, err := strconv.ParseUint(lastScoreStr, 10, 64); err == nil {
+			lastScore = &score
+		}
+	}
+
+	// Get all operations with pagination
+	operations, hasMore, err := storage.GetAllOperationsPaginated(lastScore, pageSize)
+	if err != nil {
+		sendResponse(w, http.StatusInternalServerError, false, nil, "Failed to fetch transactions: "+err.Error())
+		return
+	}
+
+	// Create pagination info with requested pageSize
+	paginationInfo := &models.PaginationInfo{
+		PageSize: pageSize,
+		HasMore:  hasMore,
+	}
+
+	sendPaginatedResponse(w, http.StatusOK, true, operations, paginationInfo, "")
+}

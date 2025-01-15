@@ -1,8 +1,11 @@
 package storage
 
 import (
+	"fmt"
 	"kasplex-executor/api/models"
 	"sort"
+
+	"github.com/gocql/gocql"
 )
 
 func GetAddressBalances(address string) ([]*models.AddressBalance, error) {
@@ -113,4 +116,80 @@ func GetTopHoldersByTokenCount(page, pageSize int) ([]HolderPortfolio, int, erro
 	}
 
 	return portfolios[start:end], total, nil
+}
+
+// GetAllAddressesPaginated returns a paginated list of all addresses with their balances
+func GetAllAddressesPaginated(lastAddress string, pageSize int) ([]models.AddressPortfolio, bool, error) {
+	var query *gocql.Query
+	if lastAddress == "" {
+		// First page query - get the first batch of addresses
+		query = sRuntime.sessionCassa.Query(`
+			SELECT DISTINCT address 
+			FROM stbalance 
+			LIMIT ?`,
+			pageSize+1,
+		)
+	} else {
+		// Query for the next page using the provided cursor
+		query = sRuntime.sessionCassa.Query(`
+			SELECT DISTINCT address 
+			FROM stbalance 
+			WHERE address > ?
+			LIMIT ?`,
+			lastAddress,
+			pageSize+1,
+		)
+	}
+
+	// Set query options
+	query = query.PageSize(pageSize + 1)
+
+	// First get the list of addresses
+	iter := query.Iter()
+	var address string
+	addresses := make([]string, 0, pageSize)
+	hasMore := false
+	count := 0
+
+	for iter.Scan(&address) {
+		if count >= pageSize {
+			hasMore = true
+			break
+		}
+		addresses = append(addresses, address)
+		count++
+	}
+
+	if err := iter.Close(); err != nil {
+		return nil, false, fmt.Errorf("error closing iterator: %v", err)
+	}
+
+	// Now get balances for each address
+	result := make([]models.AddressPortfolio, 0, len(addresses))
+	for _, addr := range addresses {
+		// Get balances for this address
+		balances, err := GetAddressBalances(addr)
+		if err != nil {
+			continue
+		}
+
+		// Only include addresses that have non-zero balances
+		hasNonZeroBalance := false
+		for _, bal := range balances {
+			if bal.Balance > 0 || bal.Locked > 0 {
+				hasNonZeroBalance = true
+				break
+			}
+		}
+
+		if hasNonZeroBalance {
+			portfolio := models.AddressPortfolio{
+				Address:  addr,
+				Balances: balances,
+			}
+			result = append(result, portfolio)
+		}
+	}
+
+	return result, hasMore, nil
 }

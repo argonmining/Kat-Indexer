@@ -6,3 +6,9 @@ type AddressBalance struct {
 	Locked  uint64 `json:"locked"`
 	Dec     int    `json:"decimals"`
 }
+
+// AddressPortfolio represents an address and all its token balances
+type AddressPortfolio struct {
+	Address  string            `json:"address"`
+	Balances []*AddressBalance `json:"balances"`
+}

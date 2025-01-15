@@ -269,8 +269,43 @@ func GetTokenOperationsPaginated(tick string, lastScore *uint64, pageSize int) (
 		if feeLeast, ok := stateData["feeleast"].(float64); ok {
 			op.FeeLeast = strconv.FormatFloat(feeLeast, 'f', 0, 64)
 		}
+		if blockAccept, ok := stateData["blockaccept"].(string); ok {
+			op.BlockAccept = blockAccept
+		}
+		if checkpoint, ok := stateData["checkpoint"].(string); ok {
+			op.Checkpoint = checkpoint
+		}
+		if mtsAdd, ok := stateData["mtsadd"].(float64); ok {
+			timestamp := strconv.FormatInt(int64(mtsAdd), 10)
+			op.MtsAdd = timestamp
+			op.MtsMod = timestamp // Set mtsMod to same value as mtsAdd
+		}
 		if opAccept, ok := stateData["opaccept"].(float64); ok {
 			op.TxAccept = strconv.FormatFloat(opAccept, 'f', 0, 64)
+		}
+		if opError, ok := stateData["operror"].(string); ok {
+			op.OpError = opError
+		}
+
+		// Only clear OpAccept if it doesn't contain any additional useful data
+		if opdataState != "" {
+			var remainingData = make(map[string]interface{})
+			json.Unmarshal([]byte(opdataState), &remainingData)
+
+			// Remove fields we've already extracted
+			delete(remainingData, "fee")
+			delete(remainingData, "feeleast")
+			delete(remainingData, "blockaccept")
+			delete(remainingData, "checkpoint")
+			delete(remainingData, "mtsadd")
+			delete(remainingData, "opaccept")
+			delete(remainingData, "operror")
+			delete(remainingData, "opscore")
+
+			// If there's any data left, keep opAccept, otherwise clear it
+			if len(remainingData) == 0 {
+				op.OpAccept = ""
+			}
 		}
 
 		// Safely extract values from scriptData
@@ -454,4 +489,165 @@ func GetOperationByHash(hash string) (*models.Operation, error) {
 
 	log.Printf("DEBUG: Successfully fetched operation for hash: %s", hash)
 	return operation, nil
+}
+
+func GetAllOperationsPaginated(lastScore *uint64, pageSize int) ([]models.Operation, bool, error) {
+	log.Printf("Fetching all operations, lastScore: %v, pageSize: %d", lastScore, pageSize)
+
+	var query *gocql.Query
+	if lastScore == nil {
+		// First page query - get the newest operations
+		query = sRuntime.sessionCassa.Query(`
+			SELECT oprange, opscore, txid, state, script, tickaffc, addressaffc 
+			FROM oplist 
+			LIMIT ?`,
+			pageSize+1,
+		)
+	} else {
+		// Query for the next page using the provided cursor
+		query = sRuntime.sessionCassa.Query(`
+			SELECT oprange, opscore, txid, state, script, tickaffc, addressaffc 
+			FROM oplist 
+			WHERE opscore < ?
+			LIMIT ?`,
+			*lastScore,
+			pageSize+1,
+		)
+	}
+
+	// Set query options
+	query = query.PageSize(pageSize + 1).RetryPolicy(&gocql.ExponentialBackoffRetryPolicy{
+		Min:        time.Second,
+		Max:        10 * time.Second,
+		NumRetries: 5,
+	})
+
+	iter := query.Iter()
+	var oprange int64
+	var opScore uint64
+	var txid, state, script, tickAffc, addressaffc string
+	operations := make([]models.Operation, 0, pageSize)
+	hasMore := false
+	count := 0
+
+	for iter.Scan(&oprange, &opScore, &txid, &state, &script, &tickAffc, &addressaffc) {
+		// If we've got more than pageSize records, just set hasMore and break
+		if count >= pageSize {
+			hasMore = true
+			break
+		}
+
+		// Get detailed operation data from opdata table
+		var opdataState, opdataScript string
+		err := sRuntime.sessionCassa.Query(`
+			SELECT state, script
+			FROM opdata 
+			WHERE txid = ?`,
+			txid,
+		).Consistency(gocql.One).Scan(&opdataState, &opdataScript)
+
+		if err != nil {
+			if err != gocql.ErrNotFound {
+				log.Printf("Error fetching opdata for txid %s: %v", txid, err)
+				continue
+			}
+			continue
+		}
+
+		// Parse script to get operation details
+		var scriptData map[string]interface{}
+		if err := json.Unmarshal([]byte(opdataScript), &scriptData); err != nil {
+			log.Printf("Error parsing script JSON for txid %s: %v", txid, err)
+			continue
+		}
+
+		// Parse state to get fee and tx details
+		var stateData map[string]interface{}
+		if err := json.Unmarshal([]byte(opdataState), &stateData); err != nil {
+			log.Printf("Error parsing state JSON for txid %s: %v", txid, err)
+			continue
+		}
+
+		// Create operation object with basic fields
+		op := models.Operation{
+			HashRev:  txid,
+			OpScore:  strconv.FormatUint(opScore, 10),
+			OpAccept: opdataState,
+		}
+
+		// Extract values from scriptData
+		if p, ok := scriptData["p"].(string); ok {
+			op.P = p
+		}
+		if opType, ok := scriptData["op"].(string); ok {
+			op.Op = opType
+		}
+		if tick, ok := scriptData["tick"].(string); ok {
+			op.Tick = tick
+		}
+		if amt, ok := scriptData["amt"].(string); ok {
+			op.Amt = amt
+		}
+		if from, ok := scriptData["from"].(string); ok {
+			op.From = from
+		}
+		if to, ok := scriptData["to"].(string); ok {
+			op.To = to
+		}
+
+		// Extract values from stateData
+		if fee, ok := stateData["fee"].(float64); ok {
+			op.FeeRev = strconv.FormatFloat(fee, 'f', 0, 64)
+		}
+		if feeLeast, ok := stateData["feeleast"].(float64); ok {
+			op.FeeLeast = strconv.FormatFloat(feeLeast, 'f', 0, 64)
+		}
+		if blockAccept, ok := stateData["blockaccept"].(string); ok {
+			op.BlockAccept = blockAccept
+		}
+		if checkpoint, ok := stateData["checkpoint"].(string); ok {
+			op.Checkpoint = checkpoint
+		}
+		if mtsAdd, ok := stateData["mtsadd"].(float64); ok {
+			timestamp := strconv.FormatInt(int64(mtsAdd), 10)
+			op.MtsAdd = timestamp
+			op.MtsMod = timestamp // Set mtsMod to same value as mtsAdd
+		}
+		if opAccept, ok := stateData["opaccept"].(float64); ok {
+			op.TxAccept = strconv.FormatFloat(opAccept, 'f', 0, 64)
+		}
+		if opError, ok := stateData["operror"].(string); ok {
+			op.OpError = opError
+		}
+
+		// Only clear OpAccept if it doesn't contain any additional useful data
+		if opdataState != "" {
+			var remainingData = make(map[string]interface{})
+			json.Unmarshal([]byte(opdataState), &remainingData)
+
+			// Remove fields we've already extracted
+			delete(remainingData, "fee")
+			delete(remainingData, "feeleast")
+			delete(remainingData, "blockaccept")
+			delete(remainingData, "checkpoint")
+			delete(remainingData, "mtsadd")
+			delete(remainingData, "opaccept")
+			delete(remainingData, "operror")
+			delete(remainingData, "opscore")
+
+			// If there's any data left, keep opAccept, otherwise clear it
+			if len(remainingData) == 0 {
+				op.OpAccept = ""
+			}
+		}
+
+		operations = append(operations, op)
+		count++
+	}
+
+	if err := iter.Close(); err != nil {
+		return nil, false, fmt.Errorf("error closing iterator: %v", err)
+	}
+
+	return operations, hasMore, nil
 }
