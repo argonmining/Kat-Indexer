@@ -17,12 +17,12 @@ var (
 		"CREATE INDEX IF NOT EXISTS idx_oplist_tick_score ON oplist(tickaffc);",
 		"CREATE INDEX IF NOT EXISTS idx_oplist_opscore ON oplist(opscore);",
 		// v2.03 - Add materialized view for efficient token operations queries
-		`CREATE MATERIALIZED VIEW IF NOT EXISTS oplist_by_tick AS
-			SELECT *
-			FROM oplist
-			WHERE tickaffc IS NOT NULL AND oprange IS NOT NULL AND opscore IS NOT NULL
-			PRIMARY KEY ((tickaffc), opscore, oprange)
-			WITH CLUSTERING ORDER BY (opscore DESC, oprange ASC)`,
+		"CREATE MATERIALIZED VIEW IF NOT EXISTS oplist_by_time AS " +
+			"SELECT oprange, opscore, txid, state, script, tickaffc " +
+			"FROM oplist " +
+			"WHERE oprange IS NOT NULL AND opscore IS NOT NULL AND tickaffc IS NOT NULL " +
+			"PRIMARY KEY ((tickaffc), opscore, oprange) " +
+			"WITH CLUSTERING ORDER BY (opscore DESC, oprange DESC);",
 	}
 	////////////////////////////
 	cqlnGetRuntime = "SELECT * FROM runtime WHERE key=?;"

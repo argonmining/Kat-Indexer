@@ -45,15 +45,13 @@ func (s *Server) Start(stop chan struct{}) error {
 	mux.HandleFunc("/api/v1/token/snapshot", handlers.GetTokenSnapshot)
 	mux.HandleFunc("/api/v1/token/balances", handlers.GetTokenBalances)
 	mux.HandleFunc("/api/v1/token/info", handlers.GetTokenInfo)
-	mux.HandleFunc("/api/v1/token/circulating-supply", handlers.GetTokenCirculatingSupply)
 	mux.HandleFunc("/api/v1/address/balances", handlers.GetAddressBalances)
 	mux.HandleFunc("/api/v1/token/holders", handlers.GetTokenHolders)
-	mux.HandleFunc("/api/v1/token/operations", handlers.GetTokenOperations)
 	mux.HandleFunc("/api/v1/tokens", handlers.GetAllTokens)
 	mux.HandleFunc("/api/v1/holders/top", handlers.GetTopHolders)
 	mux.HandleFunc("/api/v1/transaction", handlers.GetTransaction)
 	mux.HandleFunc("/api/v1/transactions", handlers.GetAllTransactions)
-	mux.HandleFunc("/api/v1/balances", handlers.GetAllAddresses)
+	mux.HandleFunc("/api/v1/addresses/balances", handlers.GetAllAddressesBalances)
 
 	s.logger.Printf("All routes registered")
 

@@ -82,34 +82,19 @@ func GetTopHolders(w http.ResponseWriter, r *http.Request) {
 	sendPaginatedResponse(w, http.StatusOK, true, modelHolders, paginationInfo, "")
 }
 
-// GetAllAddresses returns all addresses with their balances with pagination support
-func GetAllAddresses(w http.ResponseWriter, r *http.Request) {
+// GetAllAddressesBalances returns all addresses and their balances without filtering
+func GetAllAddressesBalances(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		sendResponse(w, http.StatusMethodNotAllowed, false, nil, "Method not allowed")
 		return
 	}
 
-	// Parse pagination parameters
-	pageSize, _ := strconv.Atoi(r.URL.Query().Get("pageSize"))
-	if pageSize < 1 || pageSize > 5000 {
-		pageSize = 100
-	}
-
-	// Parse lastAddress if provided for cursor-based pagination
-	lastAddress := r.URL.Query().Get("lastAddress")
-
-	// Get all addresses with pagination
-	addresses, hasMore, err := storage.GetAllAddressesPaginated(lastAddress, pageSize)
+	// Get all addresses and balances
+	addresses, err := storage.GetAllAddressesBalances()
 	if err != nil {
 		sendResponse(w, http.StatusInternalServerError, false, nil, "Failed to fetch addresses: "+err.Error())
 		return
 	}
 
-	// Create pagination info
-	paginationInfo := &models.PaginationInfo{
-		PageSize: pageSize,
-		HasMore:  hasMore,
-	}
-
-	sendPaginatedResponse(w, http.StatusOK, true, addresses, paginationInfo, "")
+	sendResponse(w, http.StatusOK, true, addresses, "")
 }
