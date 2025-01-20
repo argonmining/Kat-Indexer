@@ -26,8 +26,8 @@ func GetTokenHolders(w http.ResponseWriter, r *http.Request) {
 		page = 1
 	}
 	pageSize, _ := strconv.Atoi(r.URL.Query().Get("pageSize"))
-	if pageSize < 1 || pageSize > 2000 {
-		pageSize = 2000
+	if pageSize < 1 || pageSize > 20000 {
+		pageSize = 20000
 	}
 
 	// Get holders with pagination

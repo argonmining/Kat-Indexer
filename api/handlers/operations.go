@@ -67,8 +67,10 @@ func GetAllTransactions(w http.ResponseWriter, r *http.Request) {
 
 	// Parse pagination parameters
 	pageSize, _ := strconv.Atoi(r.URL.Query().Get("pageSize"))
-	if pageSize < 1 || pageSize > 2000 {
-		pageSize = 100
+	if pageSize < 1 {
+		pageSize = 1000
+	} else if pageSize > 5000 {
+		pageSize = 5000
 	}
 
 	// Parse lastScore if provided

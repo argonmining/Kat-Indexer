@@ -11,3 +11,5 @@ cassandra.yaml.backup
 swagger.json
 katapiSwagger.json
 katapiExamples.md
+go.mod
+go.sum
